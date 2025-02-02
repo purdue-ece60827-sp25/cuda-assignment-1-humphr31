@@ -21,6 +21,8 @@
 	#define MC_SAMPLE_SIZE		1e6
 	#define MC_ITER_COUNT		32
 
+	#define PART1_TPB           64
+
 	#define WARP_SIZE			32
 	#define SAMPLE_SIZE			MC_SAMPLE_SIZE
 	#define GENERATE_BLOCKS		1024
