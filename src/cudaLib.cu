@@ -130,19 +130,23 @@ void generatePoints (uint64_t * pSums, uint64_t pSumSize, uint64_t sampleSize) {
 
 	pSums[i] = sum;
 
-	}
+	} 
 
 }
 
 __global__ 
 void reduceCounts (uint64_t * pSums, uint64_t * totals, uint64_t pSumSize, uint64_t reduceSize) {
 	//	Insert code here
-	int i = blockIdx.x * blockDim.x + threadIdx.x;
-	int sum = 0;
-	for(int z = 0; z < reduceSize; z++){
-			sum += pSums[(i * reduceSize) + z];
-		totals[i] = sum;
+	uint64_t i = blockIdx.x * blockDim.x + threadIdx.x;
+	uint64_t sum = 0;
+	if(((i * reduceSize)) < pSumSize){
+	for(uint64_t z = 0; z < reduceSize; z++){
+		if(((i * reduceSize) + z) < pSumSize){
+			sum += pSums[(i * reduceSize) + z];	
+		}
 	}
+	}
+	totals[i] = sum;
 }
 
 int runGpuMCPi (uint64_t generateThreadCount, uint64_t sampleSize, 
@@ -199,25 +203,39 @@ double estimatePi(uint64_t generateThreadCount, uint64_t sampleSize,
 	cudaMalloc((void **) &totals_gpu, reducesize);
 
 	uint64_t pval = PART1_TPB;
-	uint64_t rval = pval / 4;
-	
 
-	generatePoints<<<generateThreadCount/pval,pval>>>(psums_gpu, numpsums, sampleSize);
-	reduceCounts<<<reduceThreadCount/rval,rval>>>(psums_gpu, totals_gpu, numpsums, reduceSize);
+	uint64_t pblock = generateThreadCount/pval;
+	uint64_t rblock = reduceThreadCount/pval;
+
+	if (reduceThreadCount % pval){
+		rblock++;
+	}
+		if (generateThreadCount % pval){
+		pblock++;
+	}
+	
+	//Pass GENERATE_BLOCKS amount of threads into here
+	generatePoints<<<pblock,pval>>>(psums_gpu, numpsums, sampleSize);
+	// generateThreadCount amount of sums should come out
+	// Pass this into reduceCounts to reduce to reduceThreadCount
+	reduceCounts<<<rblock,pval>>>(psums_gpu, totals_gpu, numpsums, reduceSize);
+	//reduceThreadCount amount of sums should come out here
 
 	cudaMemcpy(totals, totals_gpu, reducesize, cudaMemcpyDeviceToHost);
 
 	//printf("\ntotals: %d", totals[0]);
-
+	//int total_adds = 0;
 	uint64_t totalhits = 0;
 	for (uint64_t z = 0; z < reduceThreadCount; z++) {
-
+		//total_adds++;
 		totalhits += totals[z];
 		//printf("totals[%d]: %d", z, totals[z]);
 		//printf("\ntotalhits: %d", totalhits);
 	}
 
-	//printf("\ntotalhits: %u", totalhits);
+
+
+	//printf("\ntotal_adds: %u", total_adds);
 	//printf("\ngenerateThreadCount: %d", generateThreadCount);
 	//printf("\nsampleSize: %d", sampleSize);
 	//printf("\ntotalhits / generateThreadCount: %f", (double)totalhits / (double)generateThreadCount);
